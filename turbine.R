@@ -34,7 +34,7 @@ dds <- dd[sample(1:n, 5000),]
 #########################################################
 #########################################################
 
-Hv <- 20 # number of quadrature points
+Hv <- 7 # number of quadrature points
 
 # Fit CGLR model with 1 linear outcome
 fit0_cglr <- cglr(speed|theta ~ 1, data = dds, control = cglrControl(optimizer = "optim", Hv = Hv, verbose = TRUE))
