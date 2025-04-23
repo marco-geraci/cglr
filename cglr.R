@@ -1323,7 +1323,7 @@ val <- -sum(dpn(y, m = m, sigma = sigma, log = TRUE))
 return(val)
 }
 
-loglik_pgl <- function(eta, y, Hv){
+loglik_pgl <- function(eta, alpha = NULL, y, Hv){
 
 if(any(is.nan(eta))) return(Inf)
 
@@ -1331,7 +1331,7 @@ m <- eta[1:2]
 tau <- exp(eta[3])
 rho <- tanh(eta[4])
 sigma <- matrix(c(tau^2, rho*tau, rho*tau, 1), 2, 2)
-alpha <- exp(eta[5])
+if(is.null(alpha)) alpha <- exp(eta[5])
 
 val <- dpglC(as.vector(y), m = as.vector(m), sigma = as.matrix(sigma), shape = alpha, Hv = Hv, log = TRUE)
 
@@ -1339,9 +1339,9 @@ return(-sum(val))
 }
 
 # Fit PN and PGL densities
-pn.fit <- function(y, optimizer = "optim", method = "Nelder-Mead", maxit = 500, verbose = FALSE, keep.data = FALSE){
+pn.fit <- function(y, eta = NULL, optimizer = "optim", method = "Nelder-Mead", maxit = 500, verbose = FALSE, keep.data = FALSE){
 
-eta <- rep(0, 4)
+if(is.null(eta)) eta <- rep(0, 4)
 
 if(optimizer == "nlminb"){
         fit <- do.call(nlminb, args = list(objective = loglik_pn, start = eta, y = y, control = list(iter.max = maxit, trace = as.numeric(verbose))))
@@ -1368,9 +1368,9 @@ class(fit) <- "pnfit"
 return(fit)
 }
 
-pgl.fit <- function(y, optimizer = "optim", method = "Nelder-Mead", Hv = 20, maxit = 500, verbose = FALSE, keep.data = FALSE){
+pgl.fit <- function(y, eta = NULL, optimizer = "optim", method = "Nelder-Mead", Hv = 20, maxit = 500, verbose = FALSE, keep.data = FALSE){
 
-eta <- rep(0, 5)
+if(is.null(eta)) eta <- rep(0, 5)
 
 
 if(optimizer == "nlminb"){
@@ -1391,6 +1391,36 @@ tau <- exp(fit$par[3])
 rho <- tanh(fit$par[4])
 fit$sigma <- matrix(c(tau^2, rho*tau, rho*tau, 1), 2, 2)
 fit$alpha <- exp(fit$par[5])
+if(keep.data) fit$y <- y
+fit$nobs <- length(y)
+
+class(fit) <- "pglfit"
+
+return(fit)
+}
+
+pgl_alpha.fit <- function(y, eta = NULL, alpha = 1, optimizer = "optim", method = "Nelder-Mead", Hv = 20, maxit = 500, verbose = FALSE, keep.data = FALSE){
+
+if(is.null(eta)) eta <- rep(0, 4)
+
+if(optimizer == "nlminb"){
+        fit <- do.call(nlminb, args = list(objective = loglik_pgl, start = eta, y = y, alpha = alpha, Hv = Hv, control = list(iter.max = maxit, trace = as.numeric(verbose))))
+        cat(fit$message, "\n")
+        fit$loglik <- -fit$objective
+}
+
+if(optimizer == "optim"){
+        fit <- do.call(optim, args = list(fn = loglik_pgl, par = eta, y = y, alpha = alpha, Hv = Hv, control = list(maxit = maxit, trace = as.numeric(verbose))))
+        if(fit$convergence == 0) cat("Convergence successful", "\n")
+        if(fit$convergence == 1) cat("Reached maximum number of iterations without convergence", "\n")
+        fit$loglik <- -fit$value
+}
+
+fit$m <- fit$par[1:2]
+tau <- exp(fit$par[3])
+rho <- tanh(fit$par[4])
+fit$sigma <- matrix(c(tau^2, rho*tau, rho*tau, 1), 2, 2)
+fit$alpha <- alpha
 if(keep.data) fit$y <- y
 fit$nobs <- length(y)
 
@@ -1703,6 +1733,53 @@ if(!log) ans <- exp(ans)
 return(ans)
 }
 
+
+# CDF of angle
+ppn <- function(theta, m, sigma, log = FALSE){
+
+n <- length(theta)
+
+if(!is.matrix(sigma)) stop("sigma must be a matrix")
+if(!all(dim(sigma) == 2)) stop("dimension of sigma must be 2 by 2")
+if(length(m) != 2) stop("length of m must be 2")
+
+eps <- .Machine$double.eps
+
+ans <- rep(0, n)
+for(i in 1:n){
+	ans[i] <- integrate(dpn, lower = eps, upper = theta[i], m = m, sigma = sigma, log = FALSE)$value
+}
+
+if(log) ans <- log(ans)
+
+return(ans)
+
+}
+
+# Quantile function of angle
+qpn <- function(p, m, sigma, shape){
+
+n <- length(p)
+
+if(!is.matrix(sigma)) stop("sigma must be a matrix")
+if(!all(dim(sigma) == 2)) stop("dimension of sigma must be 2 by 2")
+if(length(m) != 2) stop("length of m must be 2")
+
+g <- function(x, p, m, sigma, shape){
+	(p - ppn(x, m, sigma, log = FALSE))^2
+}
+
+eps <- .Machine$double.eps
+
+ans <- rep(0, n)
+for(i in 1:n){
+	ans[i] <- optimize(f = g, lower = 0, upper = 2*pi, p = p[i], m = m, sigma = sigma)$minimum
+}
+
+return(ans)
+
+}
+
 # Marginal density of length from multivariate normal in polar coordinates (Weil) using numerical cubature
 dnweil <- function(r, m, sigma, log = FALSE){
 
@@ -1871,7 +1948,7 @@ return(ans)
 
 }
 
-# CDF of theta
+# CDF of angle
 ppgl <- function(theta, m, sigma, shape, log = FALSE){
 
 n <- length(theta)
@@ -1884,7 +1961,7 @@ eps <- .Machine$double.eps
 
 ans <- rep(0, n)
 for(i in 1:n){
-	ans[i] <- integrate(dpgl, lower = eps, upper = theta[i], m = m, sigma = sigma, shape = shape, log = FALSE)$value
+	ans[i] <- integrate(dpglC, lower = eps, upper = theta[i], m = m, sigma = sigma, shape = shape, log = FALSE)$value
 }
 
 if(log) ans <- log(ans)
@@ -1893,7 +1970,7 @@ return(ans)
 
 }
 
-# QF of theta
+# Quantile function of angle
 qpgl <- function(p, m, sigma, shape){
 
 n <- length(p)
