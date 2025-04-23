@@ -1,2 +1,2 @@
 # cglr
-Cylindrical generalized Laplace regression: This R code implements generalized Laplace regression for cylindrical responses. It should be considered experimental. The methods are described in a working paper available upon request. A real-data example is provided in the file 'turbine.R' with dataset 'turbine.csv'.
+Cylindrical generalized Laplace regression: This R code implements generalized Laplace regression for cylindrical responses. It should be considered experimental. The methods are described in a working paper available upon request. A real-data example is provided in the file 'turbine.R' with dataset 'turbine.csv'. The code also provides functions to fit the generalized Laplace, the projected generalized Laplace, and the projected normal densities. 
